@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://nova-4vn4.onrender.com',
+  baseURL: 'https://nova-4vn4.onrender.com/api',
 });
 
 api.interceptors.request.use((config) => {
