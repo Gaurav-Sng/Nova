@@ -32,6 +32,107 @@ function getInitials(name) {
   return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
 
+/* ─── Project Card (Outside Dashboard to prevent remounting/flicker) ── */
+const ProjectCard = React.memo(function ProjectCard({ p, onToggleStatus, onSelectForDelete, togglingId }) {
+  const isCompleted = p.status === 'COMPLETED';
+  const taskCount = Number(p.task_count) || 0;
+  const completedTaskCount = Number(p.completed_task_count) || 0;
+  const progressPercent = taskCount > 0 ? Math.round((completedTaskCount / taskCount) * 100) : 0;
+  const memberCount = Number(p.member_count) || 1;
+  const isOwner = p.user_role === 'OWNER';
+
+  return (
+    <Link
+      to={'/projects/' + p.id}
+      className="glass-card rounded-2xl p-6 block group relative flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-nova-glow"
+    >
+      <div>
+        {/* Top row */}
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isCompleted ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-nova-emerald/15 text-nova-emerald border border-nova-emerald/30">
+                <CheckCircle2 size={12} /> Finished
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-nova-amber/15 text-nova-amber border border-nova-amber/30">
+                <Clock size={12} /> In Progress
+              </span>
+            )}
+
+            {/* Role badge */}
+            {isOwner ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-nova-amber/10 text-nova-amber border border-nova-amber/15">
+                <Crown size={10} /> Owner
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-nova-accent/10 text-nova-accent-light border border-nova-accent/15">
+                <User size={10} /> Contributor
+              </span>
+            )}
+          </div>
+
+          {/* Quick actions — owner only */}
+          <div className="flex items-center gap-1.5">
+            {isOwner && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => onToggleStatus(e, p)}
+                  disabled={togglingId === p.id}
+                  title={isCompleted ? 'Reopen' : 'Mark Complete'}
+                  className={'p-1.5 rounded-lg text-xs transition-all ' + (isCompleted ? 'text-nova-emerald hover:bg-nova-emerald/10' : 'text-nova-text-muted hover:text-nova-emerald hover:bg-nova-emerald/10')}
+                >
+                  {isCompleted ? <RotateCcw size={15} /> : <Check size={15} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelectForDelete(p); }}
+                  title="Delete Project"
+                  className="p-1.5 rounded-lg text-xs text-nova-text-muted hover:text-nova-rose hover:bg-nova-rose/10 transition-all"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Name & description */}
+        <h3 className={'text-lg font-bold mb-2 transition-colors ' + (isCompleted ? 'text-nova-text-bright line-through decoration-nova-emerald/40 decoration-2 group-hover:text-nova-emerald' : 'text-nova-text-bright group-hover:text-nova-accent-light')}>
+          {p.name}
+        </h3>
+        <p className="text-nova-text-muted text-sm line-clamp-2 leading-relaxed mb-4">
+          {p.description || 'No description provided.'}
+        </p>
+
+        {/* Member count */}
+        <div className="flex items-center gap-1.5 mb-4">
+          <Users size={13} className="text-nova-text-muted/60" />
+          <span className="text-xs text-nova-text-muted">
+            {memberCount} {memberCount === 1 ? 'member' : 'members'}
+          </span>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div className="pt-4 border-t border-nova-border/60">
+        <div className="flex items-center justify-between text-xs text-nova-text-muted mb-1.5">
+          <span>Tasks</span>
+          <span className="font-medium text-nova-text">{completedTaskCount}/{taskCount} done ({progressPercent}%)</span>
+        </div>
+        <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
+          <div
+            className={'h-full rounded-full transition-all duration-500 ' + (isCompleted ? 'bg-nova-emerald' : 'bg-gradient-to-r from-nova-accent to-nova-cyan')}
+            style={{ width: progressPercent + '%' }}
+          />
+        </div>
+      </div>
+    </Link>
+  );
+});
+
+
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -136,106 +237,7 @@ export default function Dashboard() {
   const filteredShared = useMemo(() => applyFilters(sharedProjects), [sharedProjects, filter, searchQuery]);
   const hasResults = filteredOwned.length > 0 || filteredShared.length > 0;
 
-  /* ─── Project Card ─────────────────────────────────────────── */
-  const ProjectCard = ({ p, i }) => {
-    const isCompleted = p.status === 'COMPLETED';
-    const taskCount = Number(p.task_count) || 0;
-    const completedTaskCount = Number(p.completed_task_count) || 0;
-    const progressPercent = taskCount > 0 ? Math.round((completedTaskCount / taskCount) * 100) : 0;
-    const memberCount = Number(p.member_count) || 1;
-    const isOwner = p.user_role === 'OWNER';
-
-    return (
-      <Link
-        key={p.id}
-        to={`/projects/${p.id}`}
-        className={`glass-card rounded-2xl p-6 block group relative flex flex-col justify-between animate-fade-in-up animation-delay-${Math.min((i + 1) * 100, 500)}`}
-      >
-        <div>
-          {/* Top row */}
-          <div className="flex items-center justify-between gap-2 mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              {isCompleted ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-nova-emerald/15 text-nova-emerald border border-nova-emerald/30">
-                  <CheckCircle2 size={12} /> Finished
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-nova-amber/15 text-nova-amber border border-nova-amber/30">
-                  <Clock size={12} /> In Progress
-                </span>
-              )}
-
-              {/* Role badge */}
-              {isOwner ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-nova-amber/10 text-nova-amber border border-nova-amber/15">
-                  <Crown size={10} /> Owner
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-nova-accent/10 text-nova-accent-light border border-nova-accent/15">
-                  <User size={10} /> Contributor
-                </span>
-              )}
-            </div>
-
-            {/* Quick actions — owner only */}
-            <div className="flex items-center gap-1.5">
-              {isOwner && (
-                <>
-                  <button
-                    type="button"
-                    onClick={(e) => handleToggleStatus(e, p)}
-                    disabled={togglingId === p.id}
-                    title={isCompleted ? 'Reopen' : 'Mark Complete'}
-                    className={`p-1.5 rounded-lg text-xs transition-all ${isCompleted ? 'text-nova-emerald hover:bg-nova-emerald/10' : 'text-nova-text-muted hover:text-nova-emerald hover:bg-nova-emerald/10'}`}
-                  >
-                    {isCompleted ? <RotateCcw size={15} /> : <Check size={15} />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setProjectToDelete(p); }}
-                    title="Delete Project"
-                    className="p-1.5 rounded-lg text-xs text-nova-text-muted hover:text-nova-rose hover:bg-nova-rose/10 transition-all"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Name & description */}
-          <h3 className={`text-lg font-bold mb-2 transition-colors ${isCompleted ? 'text-nova-text-bright line-through decoration-nova-emerald/40 decoration-2 group-hover:text-nova-emerald' : 'text-nova-text-bright group-hover:text-nova-accent-light'}`}>
-            {p.name}
-          </h3>
-          <p className="text-nova-text-muted text-sm line-clamp-2 leading-relaxed mb-4">
-            {p.description || 'No description provided.'}
-          </p>
-
-          {/* Member count */}
-          <div className="flex items-center gap-1.5 mb-4">
-            <Users size={13} className="text-nova-text-muted/60" />
-            <span className="text-xs text-nova-text-muted">
-              {memberCount} {memberCount === 1 ? 'member' : 'members'}
-            </span>
-          </div>
-        </div>
-
-        {/* Progress */}
-        <div className="pt-4 border-t border-nova-border/60">
-          <div className="flex items-center justify-between text-xs text-nova-text-muted mb-1.5">
-            <span>Tasks</span>
-            <span className="font-medium text-nova-text">{completedTaskCount}/{taskCount} done ({progressPercent}%)</span>
-          </div>
-          <div className="w-full bg-white/5 rounded-full h-1.5 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-nova-emerald' : 'bg-gradient-to-r from-nova-accent to-nova-cyan'}`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-      </Link>
-    );
-  };
+  
 
   return (
     <div className="min-h-screen bg-nova-bg">
@@ -405,7 +407,7 @@ export default function Dashboard() {
                 <span className="text-xs text-nova-text-muted bg-white/5 px-2 py-0.5 rounded-full">{filteredOwned.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredOwned.map((p, i) => <ProjectCard key={p.id} p={p} i={i} />)}
+                {filteredOwned.map((p) => <ProjectCard key={p.id} p={p} onToggleStatus={handleToggleStatus} onSelectForDelete={setProjectToDelete} togglingId={togglingId} />)}
               </div>
             </div>
           )}
@@ -419,7 +421,7 @@ export default function Dashboard() {
                 <span className="text-xs text-nova-text-muted bg-white/5 px-2 py-0.5 rounded-full">{filteredShared.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredShared.map((p, i) => <ProjectCard key={p.id} p={p} i={i} />)}
+                {filteredShared.map((p) => <ProjectCard key={p.id} p={p} onToggleStatus={handleToggleStatus} onSelectForDelete={setProjectToDelete} togglingId={togglingId} />)}
               </div>
             </div>
           )}
