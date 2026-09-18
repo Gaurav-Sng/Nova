@@ -11,6 +11,8 @@ const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   dbPath: process.env.DB_PATH || path.resolve(__dirname, '../../database.sqlite'),
+  tursoUrl: process.env.TURSO_URL,
+  tursoToken: process.env.TURSO_TOKEN,
   isProduction: process.env.NODE_ENV === 'production',
 };
 

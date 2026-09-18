@@ -1,75 +1,73 @@
-const sqlite3 = require('sqlite3').verbose();
+﻿const { createClient } = require('@libsql/client');
 const path = require('path');
 const config = require('./env');
 
 const dbPath = path.resolve(config.dbPath);
 
-// Create SQLite database instance
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Failed to connect to SQLite database:', err.message);
-  } else {
-    console.log(`Connected to SQLite database at: ${dbPath}`);
-  }
-});
+// Check if Turso Cloud credentials are provided
+const isTurso = Boolean(config.tursoUrl && config.tursoToken);
 
-// Promisified database interface with parameterization support
+const client = createClient(
+  isTurso
+    ? {
+        url: config.tursoUrl,
+        authToken: config.tursoToken,
+      }
+    : {
+        url: `file:${dbPath}`,
+      }
+);
+
+if (isTurso) {
+  console.log(`Connected to Turso Cloud Database: ${config.tursoUrl}`);
+} else {
+  console.log(`Connected to local SQLite database at: ${dbPath}`);
+}
+
+// Promisified database interface compatible with all controllers
 const dbAsync = {
   // Execute a query that returns a single row
-  get: (sql, params = []) => {
-    return new Promise((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) return reject(err);
-        resolve(row);
-      });
-    });
+  get: async (sql, params = []) => {
+    const res = await client.execute({ sql, args: params });
+    return res.rows[0] || null;
   },
 
   // Execute a query that returns multiple rows
-  all: (sql, params = []) => {
-    return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
-        if (err) return reject(err);
-        resolve(rows);
-      });
-    });
+  all: async (sql, params = []) => {
+    const res = await client.execute({ sql, args: params });
+    return res.rows;
   },
 
   // Execute an INSERT, UPDATE, or DELETE query
-  run: (sql, params = []) => {
-    return new Promise((resolve, reject) => {
-      db.run(sql, params, function (err) {
-        if (err) return reject(err);
-        resolve({ lastID: this.lastID, changes: this.changes });
-      });
-    });
+  run: async (sql, params = []) => {
+    const res = await client.execute({ sql, args: params });
+    return {
+      lastID: Number(res.lastInsertRowid),
+      changes: res.rowsAffected,
+    };
   },
 
-  // Execute raw multi-statement SQL (e.g. migrations/schema)
-  exec: (sql) => {
-    return new Promise((resolve, reject) => {
-      db.exec(sql, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+  // Execute raw multi-statement SQL
+  exec: async (sql) => {
+    await client.executeMultiple(sql);
   },
 
-  // Close the database connection cleanly
-  close: () => {
-    return new Promise((resolve, reject) => {
-      db.close((err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+  // Close database connection
+  close: async () => {
+    client.close();
   },
 
   // Initialize database schema and enable PRAGMAs
   initDb: async () => {
-    // Enable Foreign Key constraints and Write-Ahead Logging (WAL)
-    await dbAsync.run('PRAGMA foreign_keys = ON');
-    await dbAsync.run('PRAGMA journal_mode = WAL');
+    // Enable Foreign Key constraints and Write-Ahead Logging (for local files)
+    try {
+      await dbAsync.run('PRAGMA foreign_keys = ON');
+      if (!isTurso) {
+        await dbAsync.run('PRAGMA journal_mode = WAL');
+      }
+    } catch (e) {
+      // Ignored for cloud environments where PRAGMAs are handled automatically
+    }
 
     // ── Core Tables ──────────────────────────────────────────────────────────
 
